@@ -405,6 +405,7 @@ const Home = () => {
                           return <span>Sorry, no valid data found to display.</span>;
                         })() : (
                           <div className="product-table-container">
+                            {/* hi */}
   <table className="product-table">
     <thead>
       <tr>
