@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Player } from '@lottiefiles/react-lottie-player';
 import { Line, Bar, Pie } from 'react-chartjs-2';
 import {
