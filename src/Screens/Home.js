@@ -17,7 +17,6 @@ import {
 import animationData from '../assets/animation.json';
 import '../css/Home.css';
 import kenaiLogo from '../assets/kenaiLogo.png';
-import stringSimilarity from 'string-similarity';
 
 
 ChartJS.register(
@@ -33,23 +32,12 @@ ChartJS.register(
 );
 
 const Home = () => {
-  const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
   const [transcribedText, setTranscribedText] = useState('');
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState([]);
   const recognitionRef = useRef(null);
   const chatContainerRef = useRef(null);
-
-
-  const getGraphTypeFromInput = (input) => {
-    const text = input.toLowerCase();
-    if (text.includes('graph') || text.includes('bar')) return 'bar';
-    if (text.includes('pie') || text.includes('chart')) return 'pie';
-    if (text.includes('production')) return 'line';
-    return null;
-  };
-
 
   useEffect(() => {
     const link = document.createElement('link');
