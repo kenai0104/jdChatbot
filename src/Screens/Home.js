@@ -100,27 +100,70 @@ const Home = () => {
   };
 
   const handleMessage = async (text) => {
-    const originalText = text.trim();
-    const fullUserInput = originalText.toLowerCase();
+  const originalText = text.trim();
+  const fullUserInput = originalText.toLowerCase();
 
-    // Remove visualization terms from the query before sending to API
-    let query = fullUserInput
-      .replace(/\b(graph|chart|plot|visualize|visualisation|visualization)\b/g, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+  // Remove visualization words from query
+  let query = fullUserInput
+    .replace(/\b(graph|chart|plot|visualize|visualisation|visualization)\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
-    if (query === '') return;
+  if (query === '') return;
 
-    setMessages(prev => [...prev, { text: originalText, sender: 'user' }]);
+  setMessages(prev => [...prev, { text: originalText, sender: 'user' }]);
 
-    const greetings = ['hi', 'hello', 'hey'];
-    if (greetings.includes(query)) {
-      const greetingResponse = "Hi, Welcome to JD. How can I assist you today?";
+  const greetings = ['hi', 'hello', 'hey'];
+  if (greetings.includes(query)) {
+    const greetingResponse = "Hi, Welcome to JD. How can I assist you today?";
+    let index = 0;
+    let animatedText = '';
+    const interval = setInterval(() => {
+      if (index < greetingResponse.length) {
+        animatedText += greetingResponse[index];
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.sender === 'bot' && last.typing) {
+            return [...prev.slice(0, -1), { ...last, text: animatedText }];
+          } else {
+            return [...prev, { text: animatedText, sender: 'bot', typing: true }];
+          }
+        });
+        index++;
+      } else {
+        clearInterval(interval);
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          { text: greetingResponse, sender: 'bot' }
+        ]);
+      }
+    }, 30);
+    return;
+  }
+
+  const needsListHint = /^(all|show|list|which).*name|product|stock|price/.test(query);
+  if (needsListHint && !query.includes("list") && !query.includes("show")) {
+    query = "list " + query;
+  }
+
+  try {
+    const response = await fetch('https://jd-tkyo.onrender.com/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: query }),
+    });
+
+    const data = await response.json();
+    const result = data?.result;
+    const responseText = data?.response;
+
+    // ✅ Handle assistant response
+    if (responseText && typeof responseText === 'string') {
       let index = 0;
       let animatedText = '';
       const interval = setInterval(() => {
-        if (index < greetingResponse.length) {
-          animatedText += greetingResponse[index];
+        if (index < responseText.length) {
+          animatedText += responseText[index];
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last && last.sender === 'bot' && last.typing) {
@@ -134,147 +177,31 @@ const Home = () => {
           clearInterval(interval);
           setMessages(prev => [
             ...prev.slice(0, -1),
-            { text: greetingResponse, sender: 'bot' }
+            { text: responseText, sender: 'bot' }
           ]);
         }
       }, 30);
       return;
     }
 
-    const needsListHint = /^(all|show|list|which).*name|product|stock|price/.test(query);
-    if (needsListHint && !query.includes("list") && !query.includes("show")) {
-      query = "list " + query;
-    }
-
-    try {
-      const response = await fetch('https://chatbot-bgq3.onrender.com/api/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: query }),
-      });
-
-      const data = await response.json();
-      const result = data?.result || null;
-
-      if (typeof result === 'string') {
-        let cleanResult = result;
-
-        const replacements = [
-          { pattern: /^The SQL result shows that\s*/i, replacement: '' },
-          { pattern: /^According to the SQL query\s*/i, replacement: '' },
-          { pattern: /^Based on the SQL data\s*/i, replacement: '' },
-        ];
-
-        for (const { pattern, replacement } of replacements) {
-          cleanResult = cleanResult.replace(pattern, replacement);
-        }
-
-        cleanResult = cleanResult.charAt(0).toUpperCase() + cleanResult.slice(1);
-
-        let index = 0;
-        let animatedText = '';
-        const interval = setInterval(() => {
-          if (index < cleanResult.length) {
-            animatedText += cleanResult[index];
-            setMessages(prev => {
-              const last = prev[prev.length - 1];
-              if (last && last.sender === 'bot' && last.typing) {
-                return [...prev.slice(0, -1), { ...last, text: animatedText }];
-              } else {
-                return [...prev, { text: animatedText, sender: 'bot', typing: true }];
-              }
-            });
-            index++;
-          } else {
-            clearInterval(interval);
-            setMessages(prev => [
-              ...prev.slice(0, -1),
-              { text: cleanResult, sender: 'bot' }
-            ]);
-          }
-        }, 30);
-        return;
+    // ✅ Handle SQL string result
+    if (typeof result === 'string') {
+      let cleanResult = result;
+      const replacements = [
+        { pattern: /^The SQL result shows that\s*/i, replacement: '' },
+        { pattern: /^According to the SQL query\s*/i, replacement: '' },
+        { pattern: /^Based on the SQL data\s*/i, replacement: '' },
+      ];
+      for (const { pattern, replacement } of replacements) {
+        cleanResult = cleanResult.replace(pattern, replacement);
       }
-
-      if (!result || !Array.isArray(result) || result.length === 0) {
-        setMessages(prev => [
-          ...prev,
-          { text: "Sorry, I didn't understand that. Could you please rephrase?", sender: 'bot' }
-        ]);
-        return;
-      }
-
-      // Decide visualization intent
-      const wantsGraph = fullUserInput.includes("graph") || fullUserInput.includes("chart") || fullUserInput.includes("plot");
-      const wantsStock = fullUserInput.includes("stock") || fullUserInput.includes("inventory");
-      const wantsPrice = fullUserInput.includes("price");
-      const wantsNames = fullUserInput.includes("name") || fullUserInput.includes("product name");
-
-      const labels = result.map(item => item.Product_Name || item.Product_ID);
-      const stockValues = result.map(item => Number(item.Stock_Qty) || 0);
-      const priceValues = result.map(item => parseFloat(item.Unit_Price) || 0);
-
-      let graphType = wantsGraph ? (data?.graphType || 'bar') : null;
-      let graphData = null;
-
-      if (wantsGraph) {
-        const datasets = [];
-
-        if (wantsStock) {
-          datasets.push({
-            label: 'Stock Quantity',
-            data: stockValues,
-            backgroundColor: 'rgba(75,192,192,0.6)',
-            borderColor: 'rgba(75,192,192,1)',
-            fill: graphType === 'line',
-            tension: 0.1,
-          });
-        }
-
-        if (wantsPrice) {
-          datasets.push({
-            label: 'Unit Price ($)',
-            data: priceValues,
-            backgroundColor: 'rgba(255, 99, 132, 0.6)',
-            borderColor: 'rgba(255, 99, 132, 1)',
-            fill: graphType === 'line',
-            tension: 0.1,
-          });
-        }
-
-        if (!wantsStock && wantsPrice && datasets.length === 0) {
-          datasets.push({
-            label: 'Unit Price ($)',
-            data: priceValues,
-            backgroundColor: 'rgba(255, 99, 132, 0.6)',
-            borderColor: 'rgba(255, 99, 132, 1)',
-            fill: graphType === 'line',
-            tension: 0.1,
-          });
-        }
-
-        if (datasets.length > 0) {
-          graphData = {
-            labels,
-            datasets,
-          };
-        }
-      }
-
-      let botText = "Here is the data you requested:";
-      if (wantsGraph && !wantsPrice && !wantsNames) {
-        botText = "Here is the stock quantity graph:";
-      } else if (wantsGraph && wantsPrice && !wantsStock) {
-        botText = "Here is the product price graph:";
-      } else if (wantsNames && !wantsGraph && !wantsPrice) {
-        botText = "Here are the product names:";
-      }
+      cleanResult = cleanResult.charAt(0).toUpperCase() + cleanResult.slice(1);
 
       let index = 0;
       let animatedText = '';
       const interval = setInterval(() => {
-        if (index < botText.length) {
-          animatedText += botText[index];
+        if (index < cleanResult.length) {
+          animatedText += cleanResult[index];
           setMessages(prev => {
             const last = prev[prev.length - 1];
             if (last && last.sender === 'bot' && last.typing) {
@@ -288,30 +215,335 @@ const Home = () => {
           clearInterval(interval);
           setMessages(prev => [
             ...prev.slice(0, -1),
-            {
-              text: botText,
-              sender: 'bot',
-              result: wantsGraph ? null : result,
-              graphType: wantsGraph ? graphType : null,
-              graphData: wantsGraph ? graphData : null,
-            }
+            { text: cleanResult, sender: 'bot' }
           ]);
         }
       }, 30);
+      return;
+    }
 
-    } catch (error) {
-      console.error('Error calling chatbot API:', error);
+    // ✅ Handle structured SQL result
+    if (!result || !Array.isArray(result) || result.length === 0) {
       setMessages(prev => [
         ...prev,
-        { text: "Error contacting server. Please try again later.", sender: 'bot' }
+        { text: "Sorry, I didn't understand that. Could you please rephrase?", sender: 'bot' }
       ]);
+      return;
     }
-  };
+
+    // Decide visualization intent
+    const wantsGraph = fullUserInput.includes("graph") || fullUserInput.includes("chart") || fullUserInput.includes("plot");
+    const wantsStock = fullUserInput.includes("stock") || fullUserInput.includes("inventory");
+    const wantsPrice = fullUserInput.includes("price");
+    const wantsNames = fullUserInput.includes("name") || fullUserInput.includes("product name");
+
+    const labels = result.map(item => item.Product_Name || item.Product_ID);
+    const stockValues = result.map(item => Number(item.Stock_Qty) || 0);
+    const priceValues = result.map(item => parseFloat(item.Unit_Price) || 0);
+
+    let graphType = wantsGraph ? (data?.graphType || 'bar') : null;
+    let graphData = null;
+
+    if (wantsGraph) {
+      const datasets = [];
+
+      if (wantsStock) {
+        datasets.push({
+          label: 'Stock Quantity',
+          data: stockValues,
+          backgroundColor: 'rgba(75,192,192,0.6)',
+          borderColor: 'rgba(75,192,192,1)',
+          fill: graphType === 'line',
+          tension: 0.1,
+        });
+      }
+
+      if (wantsPrice) {
+        datasets.push({
+          label: 'Unit Price ($)',
+          data: priceValues,
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          fill: graphType === 'line',
+          tension: 0.1,
+        });
+      }
+
+      if (!wantsStock && wantsPrice && datasets.length === 0) {
+        datasets.push({
+          label: 'Unit Price ($)',
+          data: priceValues,
+          backgroundColor: 'rgba(255, 99, 132, 0.6)',
+          borderColor: 'rgba(255, 99, 132, 1)',
+          fill: graphType === 'line',
+          tension: 0.1,
+        });
+      }
+
+      if (datasets.length > 0) {
+        graphData = {
+          labels,
+          datasets,
+        };
+      }
+    }
+
+    let botText = "Here is the data you requested:";
+    if (wantsGraph && !wantsPrice && !wantsNames) {
+      botText = "Here is the stock quantity graph:";
+    } else if (wantsGraph && wantsPrice && !wantsStock) {
+      botText = "Here is the product price graph:";
+    } else if (wantsNames && !wantsGraph && !wantsPrice) {
+      botText = "Here are the product names:";
+    }
+
+    let index = 0;
+    let animatedText = '';
+    const interval = setInterval(() => {
+      if (index < botText.length) {
+        animatedText += botText[index];
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last && last.sender === 'bot' && last.typing) {
+            return [...prev.slice(0, -1), { ...last, text: animatedText }];
+          } else {
+            return [...prev, { text: animatedText, sender: 'bot', typing: true }];
+          }
+        });
+        index++;
+      } else {
+        clearInterval(interval);
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          {
+            text: botText,
+            sender: 'bot',
+            result: wantsGraph ? null : result,
+            graphType: wantsGraph ? graphType : null,
+            graphData: wantsGraph ? graphData : null,
+          }
+        ]);
+      }
+    }, 30);
+
+  } catch (error) {
+    console.error('Error calling chatbot API:', error);
+    setMessages(prev => [
+      ...prev,
+      { text: "Error contacting server. Please try again later.", sender: 'bot' }
+    ]);
+  }
+};
 
 
+  // const handleMessage = async (text) => {
+  //   const originalText = text.trim();
+  //   const fullUserInput = originalText.toLowerCase();
 
+  //   // Remove visualization terms from the query before sending to API
+  //   let query = fullUserInput
+  //     .replace(/\b(graph|chart|plot|visualize|visualisation|visualization)\b/g, '')
+  //     .replace(/\s+/g, ' ')
+  //     .trim();
 
+  //   if (query === '') return;
 
+  //   setMessages(prev => [...prev, { text: originalText, sender: 'user' }]);
+
+  //   const greetings = ['hi', 'hello', 'hey'];
+  //   if (greetings.includes(query)) {
+  //     const greetingResponse = "Hi, Welcome to JD. How can I assist you today?";
+  //     let index = 0;
+  //     let animatedText = '';
+  //     const interval = setInterval(() => {
+  //       if (index < greetingResponse.length) {
+  //         animatedText += greetingResponse[index];
+  //         setMessages(prev => {
+  //           const last = prev[prev.length - 1];
+  //           if (last && last.sender === 'bot' && last.typing) {
+  //             return [...prev.slice(0, -1), { ...last, text: animatedText }];
+  //           } else {
+  //             return [...prev, { text: animatedText, sender: 'bot', typing: true }];
+  //           }
+  //         });
+  //         index++;
+  //       } else {
+  //         clearInterval(interval);
+  //         setMessages(prev => [
+  //           ...prev.slice(0, -1),
+  //           { text: greetingResponse, sender: 'bot' }
+  //         ]);
+  //       }
+  //     }, 30);
+  //     return;
+  //   }
+
+  //   const needsListHint = /^(all|show|list|which).*name|product|stock|price/.test(query);
+  //   if (needsListHint && !query.includes("list") && !query.includes("show")) {
+  //     query = "list " + query;
+  //   }
+
+  //   try {
+  //     const response = await fetch('https://chatbot-bgq3.onrender.com/api/ask', {
+  //       method: 'POST',
+  //       headers: { 'Content-Type': 'application/json' },
+  //       body: JSON.stringify({ question: query }),
+  //     });
+
+  //     const data = await response.json();
+  //     const result = data?.result || null;
+
+  //     if (typeof result === 'string') {
+  //       let cleanResult = result;
+
+  //       const replacements = [
+  //         { pattern: /^The SQL result shows that\s*/i, replacement: '' },
+  //         { pattern: /^According to the SQL query\s*/i, replacement: '' },
+  //         { pattern: /^Based on the SQL data\s*/i, replacement: '' },
+  //       ];
+
+  //       for (const { pattern, replacement } of replacements) {
+  //         cleanResult = cleanResult.replace(pattern, replacement);
+  //       }
+
+  //       cleanResult = cleanResult.charAt(0).toUpperCase() + cleanResult.slice(1);
+
+  //       let index = 0;
+  //       let animatedText = '';
+  //       const interval = setInterval(() => {
+  //         if (index < cleanResult.length) {
+  //           animatedText += cleanResult[index];
+  //           setMessages(prev => {
+  //             const last = prev[prev.length - 1];
+  //             if (last && last.sender === 'bot' && last.typing) {
+  //               return [...prev.slice(0, -1), { ...last, text: animatedText }];
+  //             } else {
+  //               return [...prev, { text: animatedText, sender: 'bot', typing: true }];
+  //             }
+  //           });
+  //           index++;
+  //         } else {
+  //           clearInterval(interval);
+  //           setMessages(prev => [
+  //             ...prev.slice(0, -1),
+  //             { text: cleanResult, sender: 'bot' }
+  //           ]);
+  //         }
+  //       }, 30);
+  //       return;
+  //     }
+
+  //     if (!result || !Array.isArray(result) || result.length === 0) {
+  //       setMessages(prev => [
+  //         ...prev,
+  //         { text: "Sorry, I didn't understand that. Could you please rephrase?", sender: 'bot' }
+  //       ]);
+  //       return;
+  //     }
+
+  //     // Decide visualization intent
+  //     const wantsGraph = fullUserInput.includes("graph") || fullUserInput.includes("chart") || fullUserInput.includes("plot");
+  //     const wantsStock = fullUserInput.includes("stock") || fullUserInput.includes("inventory");
+  //     const wantsPrice = fullUserInput.includes("price");
+  //     const wantsNames = fullUserInput.includes("name") || fullUserInput.includes("product name");
+
+  //     const labels = result.map(item => item.Product_Name || item.Product_ID);
+  //     const stockValues = result.map(item => Number(item.Stock_Qty) || 0);
+  //     const priceValues = result.map(item => parseFloat(item.Unit_Price) || 0);
+
+  //     let graphType = wantsGraph ? (data?.graphType || 'bar') : null;
+  //     let graphData = null;
+
+  //     if (wantsGraph) {
+  //       const datasets = [];
+
+  //       if (wantsStock) {
+  //         datasets.push({
+  //           label: 'Stock Quantity',
+  //           data: stockValues,
+  //           backgroundColor: 'rgba(75,192,192,0.6)',
+  //           borderColor: 'rgba(75,192,192,1)',
+  //           fill: graphType === 'line',
+  //           tension: 0.1,
+  //         });
+  //       }
+
+  //       if (wantsPrice) {
+  //         datasets.push({
+  //           label: 'Unit Price ($)',
+  //           data: priceValues,
+  //           backgroundColor: 'rgba(255, 99, 132, 0.6)',
+  //           borderColor: 'rgba(255, 99, 132, 1)',
+  //           fill: graphType === 'line',
+  //           tension: 0.1,
+  //         });
+  //       }
+
+  //       if (!wantsStock && wantsPrice && datasets.length === 0) {
+  //         datasets.push({
+  //           label: 'Unit Price ($)',
+  //           data: priceValues,
+  //           backgroundColor: 'rgba(255, 99, 132, 0.6)',
+  //           borderColor: 'rgba(255, 99, 132, 1)',
+  //           fill: graphType === 'line',
+  //           tension: 0.1,
+  //         });
+  //       }
+
+  //       if (datasets.length > 0) {
+  //         graphData = {
+  //           labels,
+  //           datasets,
+  //         };
+  //       }
+  //     }
+
+  //     let botText = "Here is the data you requested:";
+  //     if (wantsGraph && !wantsPrice && !wantsNames) {
+  //       botText = "Here is the stock quantity graph:";
+  //     } else if (wantsGraph && wantsPrice && !wantsStock) {
+  //       botText = "Here is the product price graph:";
+  //     } else if (wantsNames && !wantsGraph && !wantsPrice) {
+  //       botText = "Here are the product names:";
+  //     }
+
+  //     let index = 0;
+  //     let animatedText = '';
+  //     const interval = setInterval(() => {
+  //       if (index < botText.length) {
+  //         animatedText += botText[index];
+  //         setMessages(prev => {
+  //           const last = prev[prev.length - 1];
+  //           if (last && last.sender === 'bot' && last.typing) {
+  //             return [...prev.slice(0, -1), { ...last, text: animatedText }];
+  //           } else {
+  //             return [...prev, { text: animatedText, sender: 'bot', typing: true }];
+  //           }
+  //         });
+  //         index++;
+  //       } else {
+  //         clearInterval(interval);
+  //         setMessages(prev => [
+  //           ...prev.slice(0, -1),
+  //           {
+  //             text: botText,
+  //             sender: 'bot',
+  //             result: wantsGraph ? null : result,
+  //             graphType: wantsGraph ? graphType : null,
+  //             graphData: wantsGraph ? graphData : null,
+  //           }
+  //         ]);
+  //       }
+  //     }, 30);
+
+  //   } catch (error) {
+  //     console.error('Error calling chatbot API:', error);
+  //     setMessages(prev => [
+  //       ...prev,
+  //       { text: "Error contacting server. Please try again later.", sender: 'bot' }
+  //     ]);
+  //   }
+  // };
 
   const handleSendTranscription = () => {
     handleMessage(transcribedText);
