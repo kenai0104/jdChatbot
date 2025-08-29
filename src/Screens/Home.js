@@ -134,7 +134,7 @@ const Home = () => {
   }
 
   try {
-    const response = await fetch('https://jd-tkyo.onrender.com/api/ask', {
+    const response = await fetch('https://jdbackenedrender.onrender.com/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question: query }),
